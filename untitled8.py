@@ -34,7 +34,6 @@ def maior_primo():
       if n % i == 0:
         return False
     return True
-
   while True:
     try:
       numero = int(input("Digite um número: "))
@@ -48,7 +47,6 @@ def maior_primo():
 
   return "Não há um maior número primo divisor (exceto o próprio número)."
 
-print(primo(7))
 print(maior_primo())
 
 --------------------------------------------------------------------------------------------------------
