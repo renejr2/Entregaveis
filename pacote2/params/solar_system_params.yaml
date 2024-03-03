@@ -1,0 +1,5 @@
+solar_system_params:
+  frame_dinamico1:
+    orbit_radius: 5.0
+  frame_dinamico2:
+    orbit_radius: 2.0
