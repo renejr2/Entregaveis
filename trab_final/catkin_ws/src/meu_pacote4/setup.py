@@ -27,7 +27,6 @@ setup(
     entry_points={
         'console_scripts': [
             "alvos=meu_pacote4.alvos:main",
-            "test=meu_pacote4.test:main"
         ],
     },
 )
