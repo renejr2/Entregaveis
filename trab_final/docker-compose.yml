@@ -1,0 +1,17 @@
+version: '3'
+services:
+
+  harpia_tf:
+    container_name: harpia_tf
+    image: ghcr.io/ufrj-nautilus/harpia_ws:main
+    pull_policy: always
+    privileged: true
+    environment:
+      - DISPLAY=${DISPLAY}
+    volumes:
+      - /tmp/.X11-unix:/tmp/.X11-unix
+      - /etc/localtime:/etc/localtime
+      - ./catkin_ws/src:/root/catkin_ws/src
+    network_mode: host
+    stdin_open: true
+    tty: true
