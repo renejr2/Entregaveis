@@ -1,59 +1,86 @@
 import rclpy
-from geometry_msgs.msg import Vector3
+from rclpy.node import Node
+from geometry_msgs.msg import Twist, Point
 from nav_msgs.msg import Odometry
+from tf2_ros import TransformListener, Buffer
+import numpy as np
+import math
+import random
 
-# Callback para a posição do carrinho
-def callback_carrinho(msg):
-    global posicao_carrinho
-    posicao_carrinho = msg.pose.pose.position
+class ControladorCarrinho(Node):
+    def __init__(self):
+        super().__init__('controlador_carrinho')
 
-# Callback para a posição de cada alvo
-def callback_alvo(msg):
-    global posicao_carrinho
-    global posicao_alvo
-    posicao_alvo = msg.pose.pose.position
-    # Calcula a diferença entre a posição do carrinho e do alvo
-    diferenca_x = posicao_alvo.x - posicao_carrinho.x
-    diferenca_y = posicao_alvo.y - posicao_carrinho.y
-    # Determina a direção em que o carrinho deve se mover
-    if abs(diferenca_x) > abs(diferenca_y):
-        # Mover na direção X
-        direcao = Vector3()
-        direcao.x = 0.1 if diferenca_x > 0 else -0.1
-        direcao.y = 0.0
-        direcao.z = 0.0
-    else:
-        # Mover na direção Y
-        direcao = Vector3()
-        direcao.x = 0.0
-        direcao.y = 0.1 if diferenca_y > 0 else -0.1
-        direcao.z = 0.0
-    # Publica a direção para o tópico de comando do carrinho
-    publisher.publish(direcao)
+        self.current_pose = Point()
+        self.current_yaw = 0.0
 
-def main():
-    global publisher
-    global posicao_carrinho
-    global posicao_alvo
+        self.odom_subscriber = self.create_subscription(
+            Odometry,
+            '/carrinho/odometry',
+            self.odom_callback,
+            10)
+        self.vel_publisher = self.create_publisher(
+            Twist,
+            '/cmd_vel',
+            10)
 
-    rclpy.init()
-    node = rclpy.create_node('controlador_carrinho')
-    publisher = node.create_publisher(Vector3, '/cmd_vel', 10)
+        self.tf_buffer = Buffer()
+        self.tf_listener = TransformListener(self.tf_buffer, self)
 
-    # Inicializa as posições do carrinho e do alvo
-    posicao_carrinho = None
-    posicao_alvo = None
+        self.rate = self.create_rate(10)
 
-    # Inscreve-se nos tópicos de posição do carrinho e de cada alvo
-    node.create_subscription(Odometry, '/carrinho/odometry', callback_carrinho, 10)
-    node.create_subscription(Odometry, '/alvo1/odometry', callback_alvo, 10)
-    node.create_subscription(Odometry, '/alvo2/odometry', callback_alvo, 10)
-    node.create_subscription(Odometry, '/alvo3/odometry', callback_alvo, 10)
-    node.create_subscription(Odometry, '/alvo4/odometry', callback_alvo, 10)
-    node.create_subscription(Odometry, '/alvo5/odometry', callback_alvo, 10)
+        self.targets = [(5.0, 7.0, 0.0), (6.0, -6.0, 0.0), (9.0, 0.0, 0.0), (-6.0, 3.0, 0.0), (-2.0, -6.0, 0.0)]
+        self.target_index = 0
 
-    rclpy.spin(node)
-    node.destroy_node()
+    def odom_callback(self, msg):
+        self.current_pose = msg.pose.pose.position
+        orientation_q = msg.pose.pose.orientation
+        orientation_list = [orientation_q.x, orientation_q.y, orientation_q.z, orientation_q.w]
+        try:
+            transform = self.tf_buffer.lookup_transform("odom", "base_link", rclpy.time.Time())
+            self.current_yaw = math.atan2(2.0 * (transform.transform.rotation.w * transform.transform.rotation.z + transform.transform.rotation.x * transform.transform.rotation.y), 1.0 - 2.0 * (transform.transform.rotation.y * transform.transform.rotation.y + transform.transform.rotation.z * transform.transform.rotation.z))
+        except Exception as e:
+            self.get_logger().error(f"Failed to lookup transform: {e}")
+
+    def calculate_linear_velocity(self, target_pose):
+        linear_velocity = Twist()
+        linear_velocity.linear.x = 0.5 
+        return linear_velocity
+
+    def calculate_angular_velocity(self, target_pose):
+        angular_velocity = Twist()
+        target_yaw = np.arctan2(target_pose[1] - self.current_pose.y, target_pose[0] - self.current_pose.x)
+        angular_velocity.angular.z = target_yaw - self.current_yaw  
+        return angular_velocity
+
+    def run(self):
+        while rclpy.ok():
+            random.shuffle(self.targets) 
+            for target_pose in self.targets:
+                target_x, target_y, target_z = target_pose
+                self.get_logger().info(f"Going to target: {target_x}, {target_y}, {target_z}")
+
+                while True:
+                    distance_to_target = np.linalg.norm(np.array(target_pose) - np.array((self.current_pose.x, self.current_pose.y, self.current_pose.z)))
+                    if distance_to_target < 0.1:  
+                        break
+
+                    linear_velocity = self.calculate_linear_velocity(target_pose)
+                    angular_velocity = self.calculate_angular_velocity(target_pose)
+
+                    combined_velocity = Twist()
+                    combined_velocity.linear = linear_velocity.linear
+                    combined_velocity.angular = angular_velocity.angular
+
+                    self.vel_publisher.publish(combined_velocity)
+
+                    self.rate.sleep()
+
+def main(args=None):
+    rclpy.init(args=args)
+    controlador = ControladorCarrinho()
+    controlador.run()
+    rclpy.spin(controlador)
     rclpy.shutdown()
 
 if __name__ == '__main__':

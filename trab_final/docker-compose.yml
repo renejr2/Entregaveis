@@ -1,8 +1,8 @@
 version: '3'
 services:
 
-  harpia_tf:
-    container_name: harpia_tf
+  harpia_tg:
+    container_name: harpia_tg
     image: ghcr.io/ufrj-nautilus/harpia_ws:main
     pull_policy: always
     privileged: true
